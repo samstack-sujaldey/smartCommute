@@ -615,7 +615,7 @@ app.post("/api/get-fares", async (req, res) => {
     console.log(`\n=== New Request: ${pickup} to ${dropoff} ===`);
 
     browser = await puppeteer.launch({
-      headless: false,
+      headless: "new",
       userDataDir: "./browser_session",
       defaultViewport: { width: 1280, height: 800 },
       args: [
@@ -626,7 +626,7 @@ app.post("/api/get-fares", async (req, res) => {
         "--disable-gpu",
         "--disable-notifications",
         "--disable-blink-features=AutomationControlled",
-        "--disable-features=IsolateOrigins,site-per-process",
+        "--disable-features=IsolateOrigins,site-per-process, PrivacySandboxSettings4",
         "--disable-site-isolation-trials",
         "--force-color-profile=srgb",
         "--no-first-run",
@@ -634,8 +634,12 @@ app.post("/api/get-fares", async (req, res) => {
       ],
     });
 
-    const defaultPages = await browser.pages();
-    if (defaultPages.length > 0) await defaultPages[0].close();
+    // 🧹 PRE-SCRAPE CLEANUP: Close ALL old tabs from previous crashed sessions
+    const existingPages = await browser.pages();
+    const dummyPage = await browser.newPage(); // Open a fresh tab to keep the browser alive
+    for (let page of existingPages) {
+      await page.close().catch(() => {}); // Kill every single old tab
+    }
 
     const [uberData, rapidoData, olaLive] = await Promise.all([
       scrapeUber(browser, pickup, dropoff),
@@ -643,9 +647,7 @@ app.post("/api/get-fares", async (req, res) => {
       scrapeOla(browser, pickup, dropoff),
     ]);
 
-    // 👇 CRITICAL MEMORY LEAK FIX: Close the browser after scraping! 👇
     await browser.close();
-    // 👆 ----------------------------------------------------------- 👆
 
     const allPrices = { uber: uberData, ola: olaLive, rapido: rapidoData };
 
@@ -684,7 +686,7 @@ app.post("/api/get-fares", async (req, res) => {
     });
   } catch (error) {
     console.error("Critical Connection Error:", error.message);
-    if (browser) await browser.close(); // Safeguard to prevent zombie processes on crash
+    if (browser) await browser.close().catch(() => {}); // Safeguard to prevent zombie processes on crash
     res
       .status(500)
       .json({ error: "Failed to communicate with active browser engine." });

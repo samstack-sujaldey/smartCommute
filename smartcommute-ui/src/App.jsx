@@ -1,6 +1,48 @@
 import React, { useState, useEffect, useRef } from "react";
 import ScrollReveal from "scrollreveal";
 
+const LoadingState = () => {
+  const [msgIndex, setMsgIndex] = useState(0);
+
+  // Fun messages that create the illusion of active progress
+  const messages = [
+    "Haggling with Uber drivers... 🚗",
+    "Checking traffic for Rapido... 🏍️",
+    "Negotiating Ola fares... 🛺",
+    "Finding the absolute cheapest ride... 💰",
+    "Crunching the final numbers... 🧮",
+    "Almost there! 🏁",
+  ];
+
+  useEffect(() => {
+    // Change the message every 2.5 seconds
+    const timer = setInterval(() => {
+      setMsgIndex((prev) => Math.min(prev + 1, messages.length - 1));
+    }, 2500);
+    return () => clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="py-12 mb-6 flex flex-col items-center justify-center space-y-5 bg-white rounded-2xl border border-gray-100 shadow-sm reveal-item">
+      <div className="relative flex justify-center items-center w-16 h-16">
+        {/* Background Track */}
+        <div className="absolute w-full h-full border-4 border-gray-100 rounded-full"></div>
+        {/* Spinning Blue Ring */}
+        <div className="absolute w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
+        {/* Bouncing Taxi */}
+        <span className="text-2xl animate-bounce mt-1">🚕</span>
+      </div>
+
+      {/* Changing Text */}
+      <div className="h-6 flex items-center justify-center">
+        <p className="text-sm font-bold text-gray-600 tracking-wide animate-pulse transition-all">
+          {messages[msgIndex]}
+        </p>
+      </div>
+    </div>
+  );
+};
+
 // ================= GEOLOCATION & WEATHER HELPER =================
 const fetchCurrentLocationAndWeather = () => {
   return new Promise((resolve, reject) => {
@@ -50,6 +92,9 @@ export default function App() {
   const [loading, setLoading] = useState(false);
   const [locating, setLocating] = useState(false);
 
+  // New state for the login setup process
+  const [setupLoading, setSetupLoading] = useState(false);
+
   const resultsContainerRef = useRef(null);
 
   const handleLocateMe = async () => {
@@ -63,6 +108,19 @@ export default function App() {
     } finally {
       setLocating(false);
     }
+  };
+
+  // --- NEW: Trigger Backend Login Script ---
+  const handleLoginSetup = async () => {
+    setSetupLoading(true);
+    try {
+      // Note: Change localhost to your Ubuntu IP (e.g., 192.168.1.5) if testing from a phone!
+      await fetch("http://localhost:5000/api/setup-logins", { method: "POST" });
+      alert("✅ Session saved successfully! You can now search for rides.");
+    } catch (error) {
+      alert("Failed to connect to backend to start login setup.");
+    }
+    setSetupLoading(false);
   };
 
   const fetchLiveFares = async (e) => {
@@ -115,6 +173,20 @@ export default function App() {
 
   return (
     <div className="max-w-md mx-auto min-h-screen bg-gray-50 text-gray-800 sm:my-8 sm:rounded-[2.5rem] sm:border shadow-2xl overflow-hidden font-sans pb-10">
+      {/* --- NEW: LOGIN BANNER --- */}
+      <div className="bg-indigo-600 text-white text-xs px-4 py-3 flex items-center justify-between">
+        <span className="font-medium">
+          ⚠️ Make sure to login to the providers first!
+        </span>
+        <button
+          onClick={handleLoginSetup}
+          disabled={setupLoading}
+          className="bg-white text-indigo-600 px-3 py-1.5 rounded-full font-bold shadow-sm hover:bg-gray-100 disabled:opacity-50 transition-all"
+        >
+          {setupLoading ? "Check Server..." : "Login Now"}
+        </button>
+      </div>
+
       <div className="flex items-center justify-between p-5 bg-white border-b border-gray-100">
         <h1 className="text-xl font-bold tracking-tight flex items-center gap-2">
           <span className="text-blue-500 text-2xl">📍</span> SmartCommute{" "}
@@ -169,20 +241,17 @@ export default function App() {
           </div>
         </div>
 
-        {!fares && !loading && (
+        {/* --- FIXED: Button is permanently visible and updates text dynamically --- */}
+        {!loading && (
           <button
             onClick={fetchLiveFares}
-            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-md hover:bg-blue-700"
+            className="w-full bg-blue-600 text-white font-bold py-3.5 rounded-xl shadow-md hover:bg-blue-700 mb-6 transition-all"
           >
-            Find Rides
+            {fares ? "Search Again" : "Find Rides"}
           </button>
         )}
 
-        {loading && (
-          <div className="text-center py-10 animate-pulse text-gray-500">
-            Connecting to live browsers... 🚗
-          </div>
-        )}
+        {loading && <LoadingState/>}
 
         {fares && !loading && (
           <div className="space-y-4" ref={resultsContainerRef}>
@@ -211,21 +280,30 @@ export default function App() {
   );
 }
 
-const FareRow = ({ title, vendors }) => (
-  <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm reveal-item">
-    <h3 className="font-bold text-gray-800 text-[15px] mb-3">{title}</h3>
-    <div className="flex gap-3 overflow-x-auto hide-scrollbar">
-      {Object.entries(vendors).map(([vendorName, price]) => (
-        <div
-          key={vendorName}
-          className="border border-gray-100 rounded-xl p-3 min-w-30 flex flex-col items-center"
-        >
-          <span className="text-[10px] uppercase font-bold text-gray-400">
-            {vendorName}
-          </span>
-          <span className="text-lg font-black text-gray-900">{price}</span>
-        </div>
-      ))}
+const FareRow = ({ title, vendors }) => {
+  // Filter out any vendors that failed to return a price
+  const activeVendors = Object.entries(vendors).filter(
+    ([_, price]) => price !== "N/A",
+  );
+
+  if (activeVendors.length === 0) return null;
+
+  return (
+    <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm reveal-item">
+      <h3 className="font-bold text-gray-800 text-[15px] mb-3">{title}</h3>
+      <div className="flex gap-3 overflow-x-auto hide-scrollbar">
+        {activeVendors.map(([vendorName, price]) => (
+          <div
+            key={vendorName}
+            className="border border-gray-100 rounded-xl p-3 min-w-30 flex flex-col items-center"
+          >
+            <span className="text-[10px] uppercase font-bold text-gray-400">
+              {vendorName}
+            </span>
+            <span className="text-lg font-black text-gray-900">{price}</span>
+          </div>
+        ))}
+      </div>
     </div>
-  </div>
-);
+  );
+};
