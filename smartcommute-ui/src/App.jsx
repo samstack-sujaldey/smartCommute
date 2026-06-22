@@ -115,7 +115,7 @@ export default function App() {
     setSetupLoading(true);
     try {
       // Note: Change localhost to your Ubuntu IP (e.g., 192.168.1.5) if testing from a phone!
-      await fetch("https://smartcommute-n4dk.onrender.com/api/setup-logins", { method: "POST" });
+      await fetch("https://immorally-starry-grappling.ngrok-free.dev/api/setup-logins", { method: "POST" });
       alert("✅ Session saved successfully! You can now search for rides.");
     } catch (error) {
       alert("Failed to connect to backend to start login setup.");
@@ -132,7 +132,7 @@ export default function App() {
     setAiSuggestion(null);
 
     try {
-      const response = await fetch("https://smartcommute-n4dk.onrender.com/api/get-fares", {
+      const response = await fetch("https://immorally-starry-grappling.ngrok-free.dev/api/get-fares", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
