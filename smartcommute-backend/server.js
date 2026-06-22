@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const { exec } = require("child_process");
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 
@@ -576,6 +577,26 @@ async function scrapeOla(browser, pickup, dropoff) {
     return { cab: null, auto: null, bike: null };
   }
 }
+
+// --- LOGIN SETUP API ENDPOINT ---
+app.post("/api/setup-logins", (req, res) => {
+  console.log("\n🚀 Triggering manual login browser...");
+
+  // This executes your setup-logins.js file on the Ubuntu server
+  exec("node setup-logins.js", (error, stdout, stderr) => {
+    if (error) {
+      console.error(`Login Setup Error: ${error.message}`);
+      return res
+        .status(500)
+        .json({ success: false, error: "Failed to open login browser." });
+    }
+
+    // This response only gets sent AFTER you manually close the Chrome browser
+    console.log("✅ Manual login complete. Responding to frontend.");
+    res.json({ success: true });
+  });
+});
+
 // --- MAIN API ENDPOINT ---
 
 app.post("/api/get-fares", async (req, res) => {
@@ -594,8 +615,8 @@ app.post("/api/get-fares", async (req, res) => {
     console.log(`\n=== New Request: ${pickup} to ${dropoff} ===`);
 
     browser = await puppeteer.launch({
-      headless: "new",
-      userDataDir: "./browser_session", // 👈 THIS SAVES YOUR LOGINS!
+      headless: false,
+      userDataDir: "./browser_session",
       defaultViewport: { width: 1280, height: 800 },
       args: [
         "--no-sandbox",
@@ -608,6 +629,8 @@ app.post("/api/get-fares", async (req, res) => {
         "--disable-features=IsolateOrigins,site-per-process",
         "--disable-site-isolation-trials",
         "--force-color-profile=srgb",
+        "--no-first-run",
+        "--no-default-browser-check",
       ],
     });
 
@@ -619,6 +642,10 @@ app.post("/api/get-fares", async (req, res) => {
       scrapeRapido(browser, pickup, dropoff),
       scrapeOla(browser, pickup, dropoff),
     ]);
+
+    // 👇 CRITICAL MEMORY LEAK FIX: Close the browser after scraping! 👇
+    await browser.close();
+    // 👆 ----------------------------------------------------------- 👆
 
     const allPrices = { uber: uberData, ola: olaLive, rapido: rapidoData };
 
@@ -657,7 +684,7 @@ app.post("/api/get-fares", async (req, res) => {
     });
   } catch (error) {
     console.error("Critical Connection Error:", error.message);
-    if (browser) await browser.close();
+    if (browser) await browser.close(); // Safeguard to prevent zombie processes on crash
     res
       .status(500)
       .json({ error: "Failed to communicate with active browser engine." });

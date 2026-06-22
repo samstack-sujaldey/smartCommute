@@ -1,3 +1,15 @@
-2026/06/22-11:04:29.505 5fc9 Reusing MANIFEST /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/MANIFEST-000001
-2026/06/22-11:04:29.512 5fc9 Recovering log #7
-2026/06/22-11:04:29.513 5fc9 Reusing old log /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/000007.log 
+2026/06/22-12:23:48.069 de85 Reusing MANIFEST /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/06/22-12:23:48.075 de85 Recovering log #29
+2026/06/22-12:23:48.076 de85 Reusing old log /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/000029.log 
+2026/06/22-12:24:48.079 de8e Level-0 table #33: started
+2026/06/22-12:24:48.081 de8e Level-0 table #33: 15040 bytes OK
+2026/06/22-12:24:48.084 de8e Delete type=0 #29
+2026/06/22-12:24:48.084 de8e Compacting 4@0 + 1@1 files
+2026/06/22-12:24:48.087 de8e Generated table #34@0: 972 keys, 26480 bytes
+2026/06/22-12:24:48.087 de8e Compacted 4@0 + 1@1 files => 26480 bytes
+2026/06/22-12:24:48.089 de8e compacted to: files[ 0 1 1 0 0 0 0 ]
+2026/06/22-12:24:48.090 de8e Delete type=2 #27
+2026/06/22-12:24:48.090 de8e Delete type=2 #23
+2026/06/22-12:24:48.090 de8e Delete type=2 #33
+2026/06/22-12:24:48.090 de8e Delete type=2 #21
+2026/06/22-12:24:48.090 de8e Delete type=2 #30
