@@ -7,7 +7,12 @@ const StealthPlugin = require("puppeteer-extra-plugin-stealth");
 puppeteer.use(StealthPlugin());
 
 const app = express();
-app.use(cors());
+app.use(
+  cors({
+    origin: ["https://your-frontend-url.vercel.app", "http://localhost:3000"],
+    methods: ["GET", "POST"],
+  }),
+);
 app.use(express.json());
 
 const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -694,5 +699,7 @@ app.post("/api/get-fares", async (req, res) => {
 });
 
 app.listen(5000, () =>
-  console.log("Semantic Aggregator Backend running on http://localhost:5000"),
+  console.log(
+    "Semantic Aggregator Backend running on https://smartcommute-n4dk.onrender.com",
+  ),
 );
