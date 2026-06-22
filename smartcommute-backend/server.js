@@ -9,8 +9,12 @@ puppeteer.use(StealthPlugin());
 const app = express();
 app.use(
   cors({
-    origin: ["https://your-frontend-url.vercel.app", "http://localhost:3000"],
-    methods: ["GET", "POST"],
+    origin: [
+      "https://smart-commute-ten.vercel.app", // Replace with your actual Vercel URL
+      "http://localhost:3000", // Keep this for local testing
+    ],
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
   }),
 );
 app.use(express.json());
@@ -700,6 +704,6 @@ app.post("/api/get-fares", async (req, res) => {
 
 app.listen(5000, () =>
   console.log(
-    "Semantic Aggregator Backend running on https://smartcommute-n4dk.onrender.com",
+    "Semantic Aggregator Backend running on https://immorally-starry-grappling.ngrok-free.dev",
   ),
 );
