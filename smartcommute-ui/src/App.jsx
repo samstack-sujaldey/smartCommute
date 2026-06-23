@@ -3,6 +3,7 @@ import ScrollReveal from "scrollreveal";
 
 const LoadingState = () => {
   const [msgIndex, setMsgIndex] = useState(0);
+  const [timeLeft, setTimeLeft] = useState(30);
 
   // Fun messages that create the illusion of active progress
   const messages = [
@@ -15,27 +16,40 @@ const LoadingState = () => {
   ];
 
   useEffect(() => {
-    // Change the message every 2.5 seconds
-    const timer = setInterval(() => {
+    // 1. Text Message Rotator
+    const msgTimer = setInterval(() => {
       setMsgIndex((prev) => Math.min(prev + 1, messages.length - 1));
-    }, 2500);
-    return () => clearInterval(timer);
+    }, 5000); // Changed to 5 seconds so it syncs better with a 30s timer
+
+    // 2. Countdown Timer Logic
+    const countdownTimer = setInterval(() => {
+      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+
+    return () => {
+      clearInterval(msgTimer);
+      clearInterval(countdownTimer);
+    };
   }, []);
 
   return (
-    <div className="py-12 mb-6 flex flex-col items-center justify-center space-y-5 bg-white rounded-2xl border border-gray-100 shadow-sm reveal-item">
-      <div className="relative flex justify-center items-center w-16 h-16">
-        {/* Background Track */}
-        <div className="absolute w-full h-full border-4 border-gray-100 rounded-full"></div>
-        {/* Spinning Blue Ring */}
-        <div className="absolute w-full h-full border-4 border-blue-600 rounded-full border-t-transparent animate-spin"></div>
-        {/* Bouncing Taxi */}
-        <span className="text-2xl animate-bounce mt-1">🚕</span>
+    <div className="py-10 mb-6 flex flex-col items-center justify-center space-y-6 bg-white rounded-2xl border border-gray-100 shadow-sm reveal-item">
+      {/* Sleek Countdown Timer UI */}
+      <div className="flex flex-col items-center">
+        <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-2">
+          Estimated Time
+        </h3>
+
+        <div
+          className={`text-6xl font-black font-mono tracking-tighter ${timeLeft <= 5 ? "text-red-500 animate-pulse" : "text-blue-600"}`}
+        >
+          00:{timeLeft.toString().padStart(2, "0")}
+        </div>
       </div>
 
-      {/* Changing Text */}
-      <div className="h-6 flex items-center justify-center">
-        <p className="text-sm font-bold text-gray-600 tracking-wide animate-pulse transition-all">
+      {/* Changing Status Text */}
+      <div className="h-6 flex items-center justify-center bg-gray-50 px-4 py-1.5 rounded-full border border-gray-100">
+        <p className="text-sm font-semibold text-gray-600 tracking-wide animate-pulse">
           {messages[msgIndex]}
         </p>
       </div>
@@ -115,7 +129,10 @@ export default function App() {
     setSetupLoading(true);
     try {
       // Note: Change localhost to your Ubuntu IP (e.g., 192.168.1.5) if testing from a phone!
-      await fetch("https://immorally-starry-grappling.ngrok-free.dev/api/setup-logins", { method: "POST" });
+      await fetch(
+        "https://immorally-starry-grappling.ngrok-free.dev/api/setup-logins",
+        { method: "POST" },
+      );
       alert("✅ Session saved successfully! You can now search for rides.");
     } catch (error) {
       alert("Failed to connect to backend to start login setup.");
@@ -132,16 +149,19 @@ export default function App() {
     setAiSuggestion(null);
 
     try {
-      const response = await fetch("https://immorally-starry-grappling.ngrok-free.dev/api/get-fares", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          pickup,
-          dropoff,
-          weatherCondition: weatherData?.condition || "Clear",
-          temperatureC: weatherData?.temperature || 25,
-        }),
-      });
+      const response = await fetch(
+        "https://immorally-starry-grappling.ngrok-free.dev/api/get-fares",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            pickup,
+            dropoff,
+            weatherCondition: weatherData?.condition || "Clear",
+            temperatureC: weatherData?.temperature || 25,
+          }),
+        },
+      );
 
       const data = await response.json();
 
@@ -251,7 +271,7 @@ export default function App() {
           </button>
         )}
 
-        {loading && <LoadingState/>}
+        {loading && <LoadingState />}
 
         {fares && !loading && (
           <div className="space-y-4" ref={resultsContainerRef}>

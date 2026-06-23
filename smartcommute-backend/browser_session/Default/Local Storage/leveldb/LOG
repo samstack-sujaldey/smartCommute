@@ -1,3 +1,3 @@
-2026/06/22-14:27:51.989 14151 Reusing MANIFEST /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/MANIFEST-000001
-2026/06/22-14:27:51.995 14151 Recovering log #39
-2026/06/22-14:27:51.997 14151 Reusing old log /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/000039.log 
+2026/06/23-12:48:45.016 8e88 Reusing MANIFEST /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/MANIFEST-000001
+2026/06/23-12:48:45.031 8e88 Recovering log #85
+2026/06/23-12:48:45.032 8e88 Reusing old log /home/sam/smart commute/smartcommute-backend/browser_session/Default/Local Storage/leveldb/000085.log 

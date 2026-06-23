@@ -1,3 +1,4 @@
-2026/06/22-13:03:11.591 11ea3 Reusing MANIFEST /home/sam/smart commute/smartcommute-backend/browser_session/Default/shared_proto_db/MANIFEST-000001
-2026/06/22-13:03:11.591 11ea3 Recovering log #3
-2026/06/22-13:03:11.592 11ea3 Reusing old log /home/sam/smart commute/smartcommute-backend/browser_session/Default/shared_proto_db/000003.log 
+2026/06/23-12:47:56.421 8af6 Reusing MANIFEST /home/sam/smart commute/smartcommute-backend/browser_session/Default/shared_proto_db/MANIFEST-000001
+2026/06/23-12:47:56.421 8af6 Recovering log #4
+2026/06/23-12:47:56.425 8af6 (ignoring error) /home/sam/smart commute/smartcommute-backend/browser_session/Default/shared_proto_db/000004.log: dropping 238 bytes; Corruption: missing start of fragmented record(2)
+2026/06/23-12:47:56.426 8af6 Reusing old log /home/sam/smart commute/smartcommute-backend/browser_session/Default/shared_proto_db/000004.log 

@@ -1,8 +1,16 @@
+require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const { exec } = require("child_process");
 const puppeteer = require("puppeteer-extra");
 const StealthPlugin = require("puppeteer-extra-plugin-stealth");
+
+const { OpenAI } = require("openai");
+
+const openai = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: process.env.OPENROUTER_API_KEY,
+});
 
 puppeteer.use(StealthPlugin());
 
@@ -27,7 +35,7 @@ const REAL_USER_AGENT =
 
 // --- HELPER FUNCTIONS ---
 
-function generateSmartSuggestion(prices, weatherCondition, temperatureC) {
+function backupSmartSuggestion(prices, weatherCondition, temperatureC) {
   const getCheapest = (type) => {
     const platformPrices = {
       uber: prices.uber[type],
@@ -45,45 +53,88 @@ function generateSmartSuggestion(prices, weatherCondition, temperatureC) {
   const bestBike = getCheapest("bike");
   const bestAuto = getCheapest("auto");
   const bestCab = getCheapest("cab");
+  const condition = (weatherCondition || "clear").toLowerCase();
+  const isRaining = ["rain", "storm", "drizzle", "shower"].some((w) =>
+    condition.includes(w),
+  );
 
-  let suggestion = "";
-  let reason = "";
-
-  if (
-    weatherCondition.toLowerCase().includes("rain") ||
-    weatherCondition.toLowerCase().includes("storm")
-  ) {
-    if (bestCab) {
-      suggestion = `Book a Cab via ${bestCab.platform.toUpperCase()} (₹${bestCab.price})`;
-      reason = "It's raining! Avoid bikes and autos to stay dry.";
-    } else if (bestAuto) {
-      suggestion = `Book an Auto via ${bestAuto.platform.toUpperCase()} (₹${bestAuto.price})`;
-      reason = "It's raining. An auto is your best bet.";
-    }
-  } else if (temperatureC > 35) {
-    if (bestCab) {
-      suggestion = `Book an AC Cab via ${bestCab.platform.toUpperCase()} (₹${bestCab.price})`;
-      reason = `It's burning hot outside (${temperatureC}°C). Get an AC cab.`;
-    } else if (bestAuto) {
-      suggestion = `Book an Auto via ${bestAuto.platform.toUpperCase()} (₹${bestAuto.price})`;
-      reason = `It's ${temperatureC}°C outside. Avoid bikes.`;
-    }
-  } else {
-    if (bestBike) {
-      suggestion = `Take a Bike via ${bestBike.platform.toUpperCase()} (₹${bestBike.price})`;
-      reason = `Pleasant weather (${temperatureC}°C). A bike is fast and cheap!`;
-    } else if (bestAuto) {
-      suggestion = `Take an Auto via ${bestAuto.platform.toUpperCase()} (₹${bestAuto.price})`;
-      reason = `Perfect weather for an auto ride.`;
-    }
+  if (isRaining && bestCab) {
+    return {
+      title: `Book a Cab via ${bestCab.platform.toUpperCase()} (₹${bestCab.price})`,
+      description: "It's raining! Stay dry and safe in a car.",
+    };
+  } else if (temperatureC >= 35 && bestCab) {
+    return {
+      title: `Book an AC Cab via ${bestCab.platform.toUpperCase()} (₹${bestCab.price})`,
+      description: `It's burning outside (${temperatureC}°C). Treat yourself to an AC cab.`,
+    };
+  } else if (bestBike) {
+    return {
+      title: `Take a Bike via ${bestBike.platform.toUpperCase()} (₹${bestBike.price})`,
+      description: "A bike is the fastest and cheapest way to go right now!",
+    };
+  } else if (bestAuto) {
+    return {
+      title: `Take an Auto via ${bestAuto.platform.toUpperCase()} (₹${bestAuto.price})`,
+      description: "Great weather for a standard auto ride.",
+    };
   }
 
-  if (!suggestion)
-    return {
-      title: "No Rides Available",
-      description: "Couldn't find active rides.",
-    };
-  return { title: suggestion, description: reason };
+  return {
+    title: "Compare Fares Below",
+    description: "Review the live market prices to choose your best ride.",
+  };
+}
+
+async function generateTrueAISuggestion(
+  prices,
+  weatherCondition,
+  temperatureC,
+  trafficStatus,
+) {
+  try {
+    const prompt = `
+      You are a smart commuting assistant in India. Analyze this real-time data and give the user a 2-sentence recommendation on which ride to book. Be helpful, conversational, and consider safety and cost.
+      
+      Live Data:
+      - Weather: ${temperatureC}°C, ${weatherCondition}
+      - Traffic: ${trafficStatus}
+      - Uber Prices: Cab ₹${prices.uber.cab || "N/A"}, Auto ₹${prices.uber.auto || "N/A"}, Bike ₹${prices.uber.bike || "N/A"}
+      - Ola Prices: Cab ₹${prices.ola.cab || "N/A"}, Auto ₹${prices.ola.auto || "N/A"}, Bike ₹${prices.ola.bike || "N/A"}
+      - Rapido Prices: Cab ₹${prices.rapido.cab || "N/A"}, Auto ₹${prices.rapido.auto || "N/A"}, Bike ₹${prices.rapido.bike || "N/A"}
+      
+      Return ONLY a raw JSON object with no markdown formatting, backticks, or extra text. Format: {"title": "Action", "description": "Reasoning"}.
+    `;
+
+    // Add a 5-second timeout safeguard
+    const completionPromise = openai.chat.completions.create({
+      model: "google/gemma-4-31b-it:free",
+      messages: [{ role: "user", content: prompt }],
+      temperature: 0.7, // Gives the AI a little bit of creative personality
+    });
+
+    const result = await Promise.race([
+      completionPromise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Timeout")), 30000),
+      ),
+    ]);
+
+    let responseText = result.choices[0].message.content;
+
+    // Clean up any rogue formatting
+    responseText = responseText
+      .replace(/```json/gi, "")
+      .replace(/```/gi, "")
+      .trim();
+
+    return JSON.parse(responseText);
+  } catch (error) {
+    console.error("❌ OpenRouter API failed! Reason:", error.message);
+
+    // Smoothly fall back to your local engine
+    return backupSmartSuggestion(prices, weatherCondition, temperatureC);
+  }
 }
 
 // --- SCRAPER FUNCTIONS ---
@@ -101,12 +152,12 @@ async function scrapeUber(browser, pickup, dropoff) {
     try {
       await page.goto("https://m.uber.com/looking", {
         waitUntil: "domcontentloaded",
-        timeout: 25000,
+        timeout: 2000,
       });
     } catch (gotoError) {
       console.log("[Uber] Base page load settled.");
     }
-    await delay(5000);
+    await delay(2000);
 
     console.log("[Uber] Clearing blocking popups...");
     await page.evaluate(() => {
@@ -123,7 +174,7 @@ async function scrapeUber(browser, pickup, dropoff) {
       });
       if (popupTriggerBtn) popupTriggerBtn.click();
     });
-    await delay(2000);
+    await delay(1000);
 
     let inputs = await page.$$("input");
     if (inputs.length === 0) {
@@ -139,33 +190,33 @@ async function scrapeUber(browser, pickup, dropoff) {
           if (target.parentElement) target.parentElement.click();
         }
       });
-      await delay(3000);
+      await delay(2000);
       inputs = await page.$$("input");
     }
 
     console.log("[Uber] Processing pickup address...");
-    await inputs[0].click({ delay: 50 });
+    await inputs[0].click({ delay: 20 });
     await page.keyboard.down("Control");
     await page.keyboard.press("A");
     await page.keyboard.up("Control");
     await page.keyboard.press("Backspace");
-    await inputs[0].type(pickup, { delay: 100 });
-    await delay(4000);
+    await inputs[0].type(pickup, { delay: 20 });
+    await delay(1500);
     await page.keyboard.press("Enter");
-    await delay(3000);
+    await delay(1500);
 
     console.log("[Uber] Processing dropoff address...");
     inputs = await page.$$("input");
     const dropInput = inputs.length > 1 ? inputs[1] : inputs[0];
-    await dropInput.click({ delay: 50 });
+    await dropInput.click({ delay: 20 });
     await page.keyboard.down("Control");
     await page.keyboard.press("A");
     await page.keyboard.up("Control");
     await page.keyboard.press("Backspace");
-    await dropInput.type(dropoff, { delay: 100 });
-    await delay(4000);
+    await dropInput.type(dropoff, { delay: 25 });
+    await delay(1000);
     await page.keyboard.press("Enter");
-    await delay(4000);
+    await delay(1000);
 
     console.log("[Uber] Checking for Map Confirmation...");
     await page.evaluate(() => {
@@ -182,7 +233,7 @@ async function scrapeUber(browser, pickup, dropoff) {
       });
       if (confirmBtn) confirmBtn.click();
     });
-    await delay(2000);
+    await delay(1000);
 
     console.log("[Uber] Triggering Final Search...");
     // FIX: Click the top-left corner to dismiss any dropdowns/overlays blocking the button
@@ -202,7 +253,7 @@ async function scrapeUber(browser, pickup, dropoff) {
     });
 
     console.log("[Uber] Waiting for pricing elements to render...");
-    await delay(8000);
+    await delay(3000);
 
     const finalPrices = await page.evaluate(() => {
       const mappedData = { bike: null, auto: null, cab: null };
@@ -272,6 +323,7 @@ async function scrapeUber(browser, pickup, dropoff) {
     return { cab: null, auto: null, bike: null };
   }
 }
+
 async function scrapeRapido(browser, pickup, dropoff) {
   const page = await browser.newPage();
   try {
@@ -282,14 +334,14 @@ async function scrapeRapido(browser, pickup, dropoff) {
     try {
       await page.goto("https://www.rapido.bike/Home", {
         waitUntil: "domcontentloaded",
-        timeout: 25000,
+        timeout: 2500,
       });
     } catch (gotoError) {
       console.log("[Rapido] Page load timed out, checking DOM...");
     }
 
     console.log("[Rapido] Hunting for input boxes...");
-    await page.waitForSelector("input", { timeout: 15000 });
+    await page.waitForSelector("input", { timeout: 1500 });
 
     // Fuzzy DOM searching instead of strict placeholder text
     const inputs = await page.$$('input[type="text"]');
@@ -299,16 +351,16 @@ async function scrapeRapido(browser, pickup, dropoff) {
     console.log("[Rapido] Injecting Pickup...");
     await inputs[0].click({ clickCount: 3 });
     await page.keyboard.press("Backspace");
-    await inputs[0].type(pickup, { delay: 100 });
-    await delay(2000);
+    await inputs[0].type(pickup, { delay: 30 });
+    await delay(1000);
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
 
     console.log("[Rapido] Injecting Dropoff...");
     await inputs[1].click({ clickCount: 3 });
     await page.keyboard.press("Backspace");
-    await inputs[1].type(dropoff, { delay: 100 });
-    await delay(2000);
+    await inputs[1].type(dropoff, { delay: 30 });
+    await delay(1000);
     await page.keyboard.press("ArrowDown");
     await page.keyboard.press("Enter");
 
@@ -322,7 +374,7 @@ async function scrapeRapido(browser, pickup, dropoff) {
     });
 
     console.log("[Rapido] Waiting for results layout panel...");
-    await delay(6000);
+    await delay(2000);
 
     const finalPrices = await page.evaluate(() => {
       const mappedData = { bike: null, auto: null, cab: null };
@@ -397,9 +449,9 @@ async function scrapeOla(browser, pickup, dropoff) {
     try {
       await page.goto("https://www.olacabs.com", {
         waitUntil: "domcontentloaded",
-        timeout: 30000,
+        timeout: 1000,
       });
-      await delay(4000);
+      await delay(500);
     } catch (gotoError) {
       console.log("[Ola] Page load timed out, checking DOM...");
     }
@@ -415,18 +467,18 @@ async function scrapeOla(browser, pickup, dropoff) {
       if (closeBtns.length > 0) closeBtns[0].click();
       document.body.click();
     });
-    await delay(1000);
+    await delay(500);
 
     // ================= DOM-INJECTED PICKUP SELECTION =================
     console.log("[Ola] Injecting Pickup address...");
     await page.waitForSelector("#textbox1", { timeout: 15000 });
     await page.click("#textbox1", { clickCount: 3 });
     await page.keyboard.press("Backspace");
-    await page.type("#textbox1", pickup, { delay: 100 });
+    await page.type("#textbox1", pickup, { delay: 20 });
 
     // Wait for the API to load the dropdown list
     console.log("[Ola] Waiting for Pickup suggestions...");
-    await delay(3500);
+    await delay(700);
 
     // Force a native DOM click on the first suggestion item
     await page.evaluate(() => {
@@ -442,17 +494,17 @@ async function scrapeOla(browser, pickup, dropoff) {
         validItems[0].click(); // Smash the first valid item from the inside
       }
     });
-    await delay(1500);
+    await delay(700);
 
     // ================= DOM-INJECTED DROPOFF SELECTION =================
     console.log("[Ola] Injecting Dropoff address...");
     await page.click("#destination_location", { clickCount: 3 });
     await page.keyboard.press("Backspace");
-    await page.type("#destination_location", dropoff, { delay: 100 });
+    await page.type("#destination_location", dropoff, { delay: 20 });
 
     // Wait for the API to load the dropdown list
     console.log("[Ola] Waiting for Dropoff suggestions...");
-    await delay(3500);
+    await delay(500);
 
     // Force a native DOM click on the dropoff suggestion
     await page.evaluate(() => {
@@ -469,7 +521,7 @@ async function scrapeOla(browser, pickup, dropoff) {
         validItems[0].click(); // Smash the first valid item
       }
     });
-    await delay(2000);
+    await delay(500);
 
     // ================= CLICK SEARCH & CAPTURE TAB =================
     console.log("[Ola] Clicking Search...");
@@ -507,7 +559,7 @@ async function scrapeOla(browser, pickup, dropoff) {
     await newPage.setUserAgent(REAL_USER_AGENT);
     console.log("[Ola] Switched to new tab successfully!");
 
-    await delay(9000); // Give the full angular/react interface time to load fares
+    await delay(2000); // Give the full angular/react interface time to load fares
 
     console.log("[Ola] Extracting prices via Deep Shadow DOM piercing...");
     const finalPrices = await newPage.evaluate(() => {
@@ -624,7 +676,7 @@ app.post("/api/get-fares", async (req, res) => {
     console.log(`\n=== New Request: ${pickup} to ${dropoff} ===`);
 
     browser = await puppeteer.launch({
-      headless: "new",
+      headless: false,
       userDataDir: "./browser_session",
       defaultViewport: { width: 1280, height: 800 },
       args: [
@@ -678,10 +730,11 @@ app.post("/api/get-fares", async (req, res) => {
       },
     };
 
-    const aiSuggestion = generateSmartSuggestion(
+    const aiSuggestion = await generateTrueAISuggestion(
       allPrices,
       weatherCondition,
       temperatureC,
+      "Standard Traffic flow", // <-- Passed a default string so the prompt doesn't break!
     );
 
     console.log(
